@@ -106,7 +106,7 @@ class InterlinkModule(BackgroundServiceModule):
         self.pa = None
 
         self.logger.info(
-            f"Interlink initialised - hub: {self.hub_url}, "
+            f"Interlink initialized - hub: {self.hub_url}, "
             f"callsign: {self.callsign}, network: {self.network_id}"
         )
 
