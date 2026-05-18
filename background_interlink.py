@@ -79,7 +79,7 @@ class InterlinkModule(BackgroundServiceModule):
         # config
         cfg = self.config.config
         self.callsign      = cfg.get    ('CW', 'callsign',                   fallback='N0CALL')
-        self.hub_url       = cfg.get    ('Interlink', 'hub_url',             fallback='ws://localhost:8765')
+        self.hub_url       = cfg.get    ('Interlink', 'hub_url',             fallback='ws://localhost:6769')
         self.network_id    = cfg.get    ('Interlink', 'network_id',          fallback='main')
         self.in_dev_idx    = cfg.getint ('Interlink', 'input_device_index',  fallback=-1)
         self.out_dev_idx   = cfg.getint ('Interlink', 'output_device_index', fallback=-1)
