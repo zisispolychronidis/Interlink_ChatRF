@@ -46,13 +46,15 @@ On each ChatRF node:
 pip install websockets pyaudio opuslib
 ```
 
-### 2. Clone the repository and copy the module files
+### 2. Clone the repository
 
 ```
 git clone https://github.com/zisispolychronidis/Interlink_ChatRF.git
 ```
 
-Then, copy `opus.dll`, `background_interlink.py` (and optionally `dtmf_interlink_announce.py`) into your ChatRF `modules/` directory:
+### 3. Copy the module files
+
+Copy `background_interlink.py` (and optionally `dtmf_interlink_announce.py`) into your ChatRF `modules/` directory:
 
 ```
 modules/
@@ -62,7 +64,9 @@ modules/
 ├── ...
 ```
 
-### 3. Add configuration
+And copy `opus.dll` to your Python installation directory (usually something like `C:\Users\User\AppData\Local\Programs\Python\Python313` on Windows).
+
+### 4. Add configuration
 
 Add the following section to your `config/settings/config.ini`:
 
@@ -78,7 +82,9 @@ network_id = main
 # jitter_buffer_size = 10
 ```
 
-### For a hub server
+### 5. Restart ChatRF
+
+### For a hub server (doesn't need a ChatRF installation):
 
 ### 1. Install dependencies
 
@@ -245,7 +251,7 @@ If a node disconnects mid-transmission, the hub releases the TX lock automatical
 
 ## 🤝Contributing
 
-Found a bug or have an improvement? Open an issue or pull request on the [ChatRF repository](https://github.com/zisispolychronidis/ChatRF). Feature ideas and module contributions are always welcome!
+Found a bug or have an improvement? Open an issue or pull request on the repository. Feature ideas and module contributions are always welcome!
 
 ---
 
