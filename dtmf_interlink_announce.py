@@ -36,7 +36,7 @@ class InterlinkAnnounceModule(DTMFModule):
 
     def _get_interlink_module(self):
         """Find the InterlinkModule instance via the module manager."""
-        for module in self.repeater.module_manager.modules:
+        for module in self.repeater.module_manager.service_modules:
             if type(module).__name__ == "InterlinkModule":
                 return module
         return None
