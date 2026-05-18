@@ -36,6 +36,8 @@ PTT keys up
 
 ## ⏬Installation
 
+### For a ChatRF node:
+
 ### 1. Install dependencies
 
 On each ChatRF node:
@@ -44,20 +46,19 @@ On each ChatRF node:
 pip install websockets pyaudio opuslib
 ```
 
-On the hub server:
+### 2. Clone the repository and copy the module files
 
-```bash
-pip install websockets
+```
+git clone https://github.com/zisispolychronidis/Interlink_ChatRF.git
 ```
 
-### 2. Copy the module files
-
-Copy `background_interlink.py` (and optionally `dtmf_interlink_announce.py`) into your ChatRF `modules/` directory:
+Then, copy `opus.dll`, `background_interlink.py` (and optionally `dtmf_interlink_announce.py`) into your ChatRF `modules/` directory:
 
 ```
 modules/
 ├── background_interlink.py
 ├── dtmf_interlink_announce.py  # optional
+├── opus.dll # usually required on Windows
 ├── ...
 ```
 
@@ -68,7 +69,7 @@ Add the following section to your `config/settings/config.ini`:
 ```ini
 [Interlink]
 enabled = true
-hub_url = ws://YOUR_SERVER_IP:8765
+hub_url = ws://localhost:6769
 network_id = main
 # Optional settings (uncomment to change)
 # input_device_index = -1
@@ -77,7 +78,15 @@ network_id = main
 # jitter_buffer_size = 10
 ```
 
-### 4. Start the hub server
+### For a hub server
+
+### 1. Install dependencies
+
+```bash
+pip install websockets
+```
+
+### 2. Start the hub server
 
 On your server (needs a public IP or port forwarding):
 
