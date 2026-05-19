@@ -4,6 +4,7 @@ A module for [ChatRF](https://github.com/zisispolychronidis/ChatRF) that links m
 
 When any linked node keys up, their audio is streamed in real-time to every other node on the network, and played out over their radio. It's plug-and-play: install the module, point it at a hub, and you're linked.
 
+*Note: Some parts of this module were written using Claude because I don't have free time to write code these days. Any suggestions and contributions for improvement are welcome!*
 ---
 
 ## 🤔How It Works
