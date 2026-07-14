@@ -44,7 +44,7 @@ PTT keys up
 On each ChatRF node:
 
 ```bash
-pip install websockets pyaudio opuslib
+pip install websockets pyaudio opuslib numpy
 ```
 
 ### 2. Clone the repository
@@ -77,7 +77,6 @@ enabled = true
 hub_url = ws://localhost:6769
 network_id = main
 # Optional settings (uncomment to change)
-# input_device_index = -1
 # output_device_index = -1
 # opus_bitrate = 24000
 # jitter_buffer_size = 10
@@ -120,7 +119,6 @@ All options go under `[Interlink]` in `config.ini`.
 | `enabled` | `true` | Enable or disable the module |
 | `hub_url` | `ws://localhost:6769` | WebSocket URL of the hub server |
 | `network_id` | `main` | Network name - only nodes with the same ID are linked |
-| `input_device_index` | `-1` | PyAudio input device index (`-1` = system default) |
 | `output_device_index` | `-1` | PyAudio output device index (`-1` = system default) |
 | `opus_bitrate` | `24000` | Opus encoder bitrate in bps (higher = better quality, more bandwidth) |
 | `jitter_buffer_size` | `10` | Jitter buffer depth in frames |
@@ -200,13 +198,13 @@ network_id = tyropita
 
 ```
 TX path:
-  PyAudio input → Opus encode (24kbps) → 2-byte length header → WebSocket → Hub → all peers
+  Repeater shared audio buffer → Opus encode (24kbps) → 2-byte length header → WebSocket → Hub → all peers
 
 RX path:
   WebSocket → strip header → Opus decode → Queue (jitter buffer) → PyAudio output
 ```
 
-The Opus codec is optimised for voice at low bitrates and handles packet loss gracefully - well suited to real-world internet links. The jitter buffer absorbs network timing variations so playback stays smooth.
+The Opus codec is optimised for voice at low bitrates and handles packet loss gracefully, well suited to real-world internet links. The jitter buffer absorbs network timing variations so playback stays smooth.
 
 ---
 
@@ -216,7 +214,7 @@ The Opus codec is optimised for voice at low bitrates and handles packet loss gr
 
 Check `logs/repeater.log` for errors. Most likely cause is a missing dependency:
 ```bash
-pip install websockets pyaudio opuslib
+pip install websockets pyaudio opuslib numpy
 ```
 
 **Not connecting to hub**
@@ -242,7 +240,7 @@ for i in range(p.get_device_count()):
     print(i, p.get_device_info_by_index(i)['name'])
 ```
 
-Then set `input_device_index` and `output_device_index` in config accordingly.
+Then set `output_device_index` in config accordingly.
 
 **TX lockout not releasing**
 
