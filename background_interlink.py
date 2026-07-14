@@ -9,7 +9,6 @@ Configuration (config.ini):
     enabled = true
     hub_url = ws://yourserver.com:6769
     network_id = main
-    input_device_index = -1
     output_device_index = -1
     opus_bitrate = 24000
     jitter_buffer_size = 10
@@ -22,6 +21,7 @@ import struct
 import asyncio
 import json
 import logging
+import numpy as np
 
 from modules.base import BackgroundServiceModule
 
@@ -81,7 +81,6 @@ class InterlinkModule(BackgroundServiceModule):
         self.callsign      = cfg.get    ('CW', 'callsign',                   fallback='N0CALL')
         self.hub_url       = cfg.get    ('Interlink', 'hub_url',             fallback='ws://localhost:6769')
         self.network_id    = cfg.get    ('Interlink', 'network_id',          fallback='main')
-        self.in_dev_idx    = cfg.getint ('Interlink', 'input_device_index',  fallback=-1)
         self.out_dev_idx   = cfg.getint ('Interlink', 'output_device_index', fallback=-1)
         self.opus_bitrate  = cfg.getint ('Interlink', 'opus_bitrate',        fallback=24000)
         self.jitter_buf_sz = cfg.getint ('Interlink', 'jitter_buffer_size',  fallback=10)
@@ -250,17 +249,28 @@ class InterlinkModule(BackgroundServiceModule):
             self.logger.debug(f"Opus decode error: {e}")
 
     # ---------------------------------------------------------------------
-    # TX thread - captures mic audio and streams it when someone is talking
+    # TX thread - reads mic audio from repeater's shared audio buffer and
+    # streams it to the hub when someone is talking
     # ---------------------------------------------------------------------
     def _tx_thread(self):
         """
         Watches repeater.talking. When True (and we're not receiving network
-        audio), captures PyAudio input, encodes to Opus, sends to hub.
+        audio), pulls the raw PCM chunks from self.repeater.shared_data['audio_buffer'].
+        Chunks are downmixed to mono, resampled to 48kHz, sliced into 20ms Opus frames
+        and sent to the hub.
         """
-        stream = None
         was_talking = False
 
-        in_idx = self.in_dev_idx if self.in_dev_idx >= 0 else None
+        # Index into shared_data['audio_buffer'] we've already consumed.
+        # We only ever read from this list, never mutate it.
+        self._buf_pos = 0
+
+        # Resampled mono 48kHz PCM waiting to be sliced into Opus frames
+        self._pcm48k = np.array([], dtype=np.int16)
+
+        src_rate        = self.repeater.config.RATE
+        src_channels    = self.repeater.config.CHANNELS
+        src_channel_sel = self.repeater.config.INPUT_CHANNEL
 
         while not self._stop_event.is_set():
             talking = getattr(self.repeater, 'talking', False)
@@ -268,61 +278,84 @@ class InterlinkModule(BackgroundServiceModule):
             # Don't TX if we're playing received network audio
             if self.receiving_network_audio:
                 if was_talking:
-                    self._close_tx_stream(stream)
-                    stream = None
+                    self._send_control({"type": "tx_end", "callsign": self.callsign})
                     was_talking = False
-                time.sleep(0.05)
+                    self._pcm48k = np.array([], dtype=np.int16)
+                time.sleep(0.02)
                 continue
 
-            if talking and not was_talking:
-                # PTT active
-                try:
-                    # Open input stream
-                    stream = self.pa.open(
-                        format=pyaudio.paInt16,
-                        channels=CHANNELS,
-                        rate=SAMPLE_RATE,
-                        input=True,
-                        input_device_index=in_idx,
-                        frames_per_buffer=FRAME_SIZE,
-                    )
-                    # Send message to hub
-                    self._send_control({"type": "tx_start", "callsign": self.callsign})
-                    was_talking = True
-                    self.logger.debug("TX started")
-                except Exception as e:
-                    self.logger.error(f"Could not open input stream: {e}")
-                    time.sleep(1)
-                    continue
+            buf = getattr(self.repeater, 'shared_data', {}).get('audio_buffer', [])
 
+            # If the buffer is shorter, it was reset. We resync.
+            if len(buf) < self._buf_pos:
+                self._buf_pos = 0
+
+            new_chunks = buf[self._buf_pos:]
+            self._buf_pos = len(buf)
+
+            if talking and not was_talking:
+                self._send_control({"type": "tx_start", "callsign": self.callsign})
+                was_talking = True
+                self.logger.debug("TX started (shared audio buffer)")
             elif not talking and was_talking:
-                # PTT inactive
-                self._close_tx_stream(stream)
-                stream = None
                 self._send_control({"type": "tx_end", "callsign": self.callsign})
                 was_talking = False
+                # Drop any leftover unframed samples so the next transmission starts clean
+                self._pcm48k = np.array([], dtype=np.int16)
                 self.logger.debug("TX ended")
 
-            # If actively transmitting, grab a frame and send it
-            if talking and stream and stream.is_active():
-                try:
-                    pcm_bytes = stream.read(FRAME_SIZE, exception_on_overflow=False)
-                    opus_payload = self.encoder.encode(pcm_bytes, FRAME_SIZE)
-                    # Prepend 2-byte length header
-                    packet = struct.pack('<H', len(opus_payload)) + opus_payload
-                    self._send_audio(packet)
-                except Exception as e:
-                    self.logger.debug(f"TX frame error: {e}")
-            else:
-                time.sleep(0.01)
+            if new_chunks:
+                mono = self._downmix_chunks(new_chunks, src_channels, src_channel_sel)
+                resampled = self._resample(mono, src_rate, SAMPLE_RATE)
+                if resampled.size:
+                    self._pcm48k = np.concatenate([self._pcm48k, resampled])
 
-    def _close_tx_stream(self, stream):
-        try:
-            if stream:
-                stream.stop_stream()
-                stream.close()
-        except Exception:
-            pass
+                # Slice off complete 20ms Opus frames
+                while self._pcm48k.size >= FRAME_SIZE:
+                    frame, self._pcm48k = self._pcm48k[:FRAME_SIZE], self._pcm48k[FRAME_SIZE:]
+                    try:
+                        opus_payload = self.encoder.encode(frame.tobytes(), FRAME_SIZE)
+                        # Prepend 2-byte length header
+                        packet = struct.pack('<H', len(opus_payload)) + opus_payload
+                        self._send_audio(packet)
+                    except Exception as e:
+                        self.logger.debug(f"TX frame error: {e}")
+
+            time.sleep(0.01)
+
+    @staticmethod
+    def _downmix_chunks(chunks, channels, channel_sel):
+        """Concatenate raw PCM chunks from repeater.py and downmix to mono."""
+        raw = b''.join(chunks)
+        if not raw:
+            return np.array([], dtype=np.int16)
+
+        samples = np.frombuffer(raw, dtype=np.int16)
+
+        if channels == 2:
+            samples = samples.reshape(-1, 2)
+            if channel_sel == 'left':
+                samples = samples[:, 0]
+            elif channel_sel == 'right':
+                samples = samples[:, 1]
+            else:  # 'mono' or 'both' -> average down to mono
+                samples = samples.mean(axis=1).astype(np.int16)
+
+        return samples
+
+    @staticmethod
+    def _resample(samples: np.ndarray, orig_rate: int, target_rate: int) -> np.ndarray:
+        """Linear-interpolation resample (no audioop dependency, since it's
+        gone in Python 3.13+). Good enough for narrowband voice over RF."""
+        if samples.size == 0 or orig_rate == target_rate:
+            return samples.astype(np.int16)
+
+        duration = samples.size / orig_rate
+        target_len = max(1, int(round(duration * target_rate)))
+        x_old = np.linspace(0, duration, samples.size, endpoint=False)
+        x_new = np.linspace(0, duration, target_len, endpoint=False)
+        resampled = np.interp(x_new, x_old, samples.astype(np.float32))
+        return np.clip(resampled, -32768, 32767).astype(np.int16)
 
     # ------------------------------------------------------------------
     # RX audio thread - plays contents via PyAudio output
