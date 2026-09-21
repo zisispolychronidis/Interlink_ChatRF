@@ -265,6 +265,10 @@ class InterlinkModule(BackgroundServiceModule):
         # We only ever read from this list, never mutate it.
         self._buf_pos = 0
 
+        # The list object that index belongs to. repeater.py starts a fresh list
+        # for every transmission, so a different object means "buffer was reset".
+        self._buf_ref = None
+
         # Resampled mono 48kHz PCM waiting to be sliced into Opus frames
         self._pcm48k = np.array([], dtype=np.int16)
 
@@ -286,8 +290,11 @@ class InterlinkModule(BackgroundServiceModule):
 
             buf = getattr(self.repeater, 'shared_data', {}).get('audio_buffer', [])
 
-            # If the buffer is shorter, it was reset. We resync.
-            if len(buf) < self._buf_pos:
+            # A different list object means the buffer was reset (new transmission),
+            # so start from its beginning. The length check remains as a fallback
+            # for modules that empty the same list in place.
+            if buf is not self._buf_ref or len(buf) < self._buf_pos:
+                self._buf_ref = buf
                 self._buf_pos = 0
 
             new_chunks = buf[self._buf_pos:]
