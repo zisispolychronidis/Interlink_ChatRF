@@ -18,7 +18,7 @@ PTT keys up
   → send to hub                                    → out over radio
 ```
 
-- Audio is captured from the system input device, compressed with **Opus**, and streamed over a **WebSocket** to a central hub
+- Audio is captured from the shared audio buffer, compressed with **Opus**, and streamed over a **WebSocket** to a central hub
 - The hub fans the audio out to all other nodes in the same network in real-time
 - Receiving nodes decode the audio and play it through a **jitter buffer** to smooth out network hiccups
 - A TX lockout flag prevents a node from echoing received network audio back to the hub
